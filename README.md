@@ -6,7 +6,7 @@ Real-time event dashboard with Telegram bot integration.
 
 ### Linux
 ```bash
-pip3 install -r requirements.txt
+pip3 install --user -r requirements.txt
 cargo install bore-cli
 chmod +x start_linux.sh stop_linux.sh
 ./start_linux.sh

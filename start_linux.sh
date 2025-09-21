@@ -8,6 +8,10 @@ echo "Starting SF Dashboard..."
 # Kill any existing instances
 pkill -f "python.*api.py" 2>/dev/null
 pkill -f "python.*telegram_bot.py" 2>/dev/null
+pkill -f "bore local" 2>/dev/null
+
+# Add user bin to PATH if not already there
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 
 # Start API server in background
 echo "Starting API server..."
