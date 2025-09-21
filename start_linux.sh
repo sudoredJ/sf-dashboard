@@ -19,7 +19,15 @@ python3 api.py &
 API_PID=$!
 
 # Wait a moment for API to start
-sleep 2
+sleep 3
+
+# Test if API is responding
+echo "Testing API connection..."
+if curl -s http://localhost:5000/events >/dev/null 2>&1; then
+    echo "✓ API is responding on port 5000"
+else
+    echo "✗ API not responding - check for errors above"
+fi
 
 # Start Telegram bot in background  
 echo "Starting Telegram bot..."
