@@ -77,26 +77,15 @@ def get_events():
         month_day = current_slot.strftime('%b %d')
         date_display = f"{day_name} {month_day} {time_display}"
         
-        # Check if there are events for this slot
-        slot_key = f"{date_str}_{time_display}"
-        alt_slot_key = f"{date_str}_"  # For events without specific time
-        
-        if slot_key in scheduled_events:
-            # Events scheduled for this specific time
-            for event in scheduled_events[slot_key]:
-                time_slots.append({
-                    'id': event['id'],
-                    'title': event['title'],
-                    'date': date_display
-                })
-        elif alt_slot_key in scheduled_events and hour in [9, 12, 15, 18]:  # Show all-day events at key times
-            # Events without specific time (all-day events)
-            for event in scheduled_events[alt_slot_key]:
-                time_slots.append({
-                    'id': event['id'],
-                    'title': event['title'],
-                    'date': f"{day_name} {month_day} (all day)"
-                })
+        # Check if there are events for this date
+        for key, events in scheduled_events.items():
+            if key.startswith(date_str):
+                for event in events:
+                    time_slots.append({
+                        'id': event['id'],
+                        'title': event['title'],
+                        'date': event['date_display']
+                    })
         
         # Move to next 3-hour block
         current_slot += timedelta(hours=3)
