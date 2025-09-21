@@ -4,9 +4,11 @@ from datetime import datetime, timedelta
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 import re
+import os
 
-TOKEN = '8489199162:AAEgtfUkOPOJJkV58ZYw5FFSCDzSMItR0zk'
-
+from dotenv import load_dotenv
+load_dotenv()
+TOKEN = os.getenv('BOT_TOKEN')
 async def add_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 3:
         await update.message.reply_text(
