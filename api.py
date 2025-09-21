@@ -6,107 +6,113 @@ from datetime import datetime, timedelta
 app = Flask(__name__)
 CORS(app)
 
+def ensure_schema(db: sqlite3.Connection) -> None:
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            date_display TEXT NOT NULL,
+            event_date TEXT NOT NULL,
+            time TEXT
+        )
+    ''')
+    db.commit()
+
 @app.route('/events')
 def get_events():
     db = sqlite3.connect('events.db')
+    ensure_schema(db)
     
     # Delete events that have passed
     db.execute('DELETE FROM events WHERE event_date < date("now")')
     db.commit()
     
-    # Get all future events
+    # Return each event once, ordered
     cur = db.execute('''
         SELECT id, title, date_display, event_date, time 
         FROM events 
         WHERE event_date >= date('now') 
         ORDER BY event_date, time
     ''')
-    
-    # Create a dictionary to store events by date and time
-    scheduled_events = {}
+    events = []
     for row in cur:
-        event_date = row[3]  # event_date
-        time_str = row[4] if row[4] else ''  # time
-        key = f"{event_date}_{time_str}"
-        if key not in scheduled_events:
-            scheduled_events[key] = []
-        scheduled_events[key].append({
+        events.append({
             'id': row[0],
             'title': row[1],
-            'date_display': row[2]
+            'date': row[2]
         })
-    
-    # Generate time blocks starting from current time
-    now = datetime.now()
-    current_hour = now.hour
-    
-    # Round to next 3-hour block (12am, 3am, 6am, 9am, 12pm, 3pm, 6pm, 9pm)
-    time_blocks = [0, 3, 6, 9, 12, 15, 18, 21]
-    next_block_hour = None
-    for block in time_blocks:
-        if block > current_hour:
-            next_block_hour = block
-            break
-    
-    # If no block found today, start from midnight tomorrow
-    if next_block_hour is None:
-        start_time = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    else:
-        start_time = now.replace(hour=next_block_hour, minute=0, second=0, microsecond=0)
-    
-    # Generate time slots (approximately 20 slots to cover ~2.5 days)
-    time_slots = []
-    current_slot = start_time
-    
-    for i in range(20):
-        date_str = current_slot.strftime('%Y-%m-%d')
-        hour = current_slot.hour
-        
-        # Format time display
-        if hour == 0:
-            time_display = "12am"
-        elif hour < 12:
-            time_display = f"{hour}am"
-        elif hour == 12:
-            time_display = "12pm"
-        else:
-            time_display = f"{hour-12}pm"
-        
-        # Format date display
-        day_name = current_slot.strftime('%a')
-        month_day = current_slot.strftime('%b %d')
-        date_display = f"{day_name} {month_day} {time_display}"
-        
-        # Check if there are events for this date
-        for key, events in scheduled_events.items():
-            if key.startswith(date_str):
-                for event in events:
-                    time_slots.append({
-                        'id': event['id'],
-                        'title': event['title'],
-                        'date': event['date_display']
-                    })
-        
-        # Move to next 3-hour block
-        current_slot += timedelta(hours=3)
-    
     db.close()
-    return jsonify(time_slots)
+    return jsonify(events)
 
 @app.route('/add-event', methods=['POST'])
 def add_event():
-    data = request.json
-    db = sqlite3.connect('events.db')
-    
-    title = data.get('title', '')
-    date_display = data.get('date', '')
-    event_date = data.get('event_date', None)
-    time = data.get('time', None)
-    
-    db.execute('INSERT INTO events (title, date_display, event_date, time) VALUES (?, ?, ?, ?)', 
-               (title, date_display, event_date, time))
-    db.commit()
-    db.close()
-    return jsonify({"status": "ok"})
+    try:
+        data = request.get_json(silent=True, force=False) or {}
+        db = sqlite3.connect('events.db')
+        ensure_schema(db)
 
-app.run(host='0.0.0.0', port=5000)
+        title = (data.get('title') or '').strip()
+        date_display = (data.get('date') or data.get('date_display') or '').strip()
+        event_date = (data.get('event_date') or '').strip()
+        time_str = (data.get('time') or '').strip()
+
+        if not title:
+            return jsonify({"status": "error", "message": "title is required"}), 400
+
+        # Default event_date to today if not provided
+        if not event_date:
+            event_date = datetime.now().strftime('%Y-%m-%d')
+
+        # Default date_display if not provided
+        if not date_display:
+            # Use e.g. "Sun Sep 21 3pm" or just date if no time
+            if time_str:
+                date_display = f"{datetime.now().strftime('%a %b %d')} {time_str}"
+            else:
+                date_display = datetime.now().strftime('%a %b %d')
+
+        cur = db.execute(
+            'INSERT INTO events (title, date_display, event_date, time) VALUES (?, ?, ?, ?)',
+            (title, date_display, event_date, time_str)
+        )
+        db.commit()
+        new_id = cur.lastrowid
+        db.close()
+        return jsonify({"status": "ok", "id": new_id})
+
+    except Exception as e:
+        try:
+            db.close()
+        except Exception:
+            pass
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/delete-event/<int:event_id>', methods=['DELETE'])
+def delete_event(event_id):
+    try:
+        db = sqlite3.connect('events.db')
+        db.execute('DELETE FROM events WHERE id = ?', (event_id,))
+        db.commit()
+        deleted = db.total_changes
+        db.close()
+        
+        if deleted:
+            return jsonify({"status": "ok", "message": "Event deleted"})
+        else:
+            return jsonify({"status": "error", "message": "Event not found"}), 404
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/clear-all', methods=['POST'])
+def clear_all():
+    try:
+        db = sqlite3.connect('events.db')
+        db.execute('DELETE FROM events')
+        db.commit()
+        db.close()
+        return jsonify({"status": "ok", "message": "All events cleared"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
