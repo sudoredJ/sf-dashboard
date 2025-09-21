@@ -1,0 +1,4 @@
+events.db
+*.pyc
+__pycache__/
+bore

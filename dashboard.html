@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="refresh" content="300">
+    <style>
+        body { 
+            margin:0; 
+            background:#000; 
+            color:#0f0; 
+            font-family:'Trebuchet MS', sans-serif; 
+            font-size:18px;
+            overflow:hidden;
+            height:100vh;
+            display:flex;
+            flex-direction:column;
+        }
+        .top-bar {
+            height:80px;
+            border-bottom:2px solid #0f0;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            font-size:48px;
+            font-family:'Courier New', monospace;
+            color:#0f0;
+            font-weight:bold;
+        }
+        .main-content {
+            display:grid; 
+            grid-template-columns:600px 1fr; 
+            height:calc(100vh - 82px);
+        }
+        .weather { 
+            padding:30px; 
+            border-right:2px solid #0f0;
+            display:flex;
+            flex-direction:column;
+            font-family:'Courier New', monospace;
+            overflow-x:auto;
+        }
+        .weather h1 { 
+            margin:0 0 20px 0;
+            font-size:28px;
+            font-family:'Trebuchet MS', sans-serif;
+        }
+        #weather-data {
+            font-size:16px;
+            line-height:1.5;
+            font-family:'Courier New', monospace;
+            color:#0f0;
+        }
+        .weather-line {
+            display:block;
+            white-space:nowrap;
+        }
+        .weather-now {
+            font-size:24px;
+            font-weight:bold;
+            color:#0f0;
+        }
+        .events { 
+            padding:30px;
+            overflow-y:auto;
+        }
+        #date-header { 
+            margin:0 0 20px 0;
+            font-size:28px;
+            border-bottom:1px solid #0f0;
+            padding-bottom:10px;
+            line-height:1.4;
+        }
+        .event { 
+            padding:20px; 
+            margin:15px 0; 
+            background:#111; 
+            border-left:4px solid #0f0;
+            font-size:20px;
+            border-radius:0 5px 5px 0;
+        }
+        .event:hover {
+            background:#1a1a1a;
+            border-left-color:#0ff;
+        }
+        .event-date { 
+            color:#0f0; 
+            font-weight:bold;
+            font-size:18px;
+        }
+        .event-title {
+            color:#0f0;
+            font-size:22px;
+            margin-top:5px;
+        }
+        .date-line { font-size:36px; font-weight:bold; }
+        .sun-times { color:#fa0; font-weight:bold; }
+    </style>
+</head>
+<body>
+    <div class="top-bar">
+        <div id="current-time"></div>
+    </div>
+    <div class="main-content">
+        <div class="weather">
+            <h1>SF WEATHER - 48HR</h1>
+            <div id="weather-data">Loading...</div>
+        </div>
+        <div class="events">
+            <div id="date-header">Loading...</div>
+            <div id="list">Loading events...</div>
+        </div>
+    </div>
+    <script>
+        // Update time every second in PST
+        function updateTime() {
+            const now = new Date();
+            const pstTime = new Date(now.toLocaleString("en-US", {timeZone: "America/Los_Angeles"}));
+            const time = pstTime.toLocaleTimeString('en-US', { 
+                hour: 'numeric', 
+                minute: '2-digit', 
+                second: '2-digit',
+                hour12: true 
+            });
+            document.getElementById('current-time').innerHTML = time;
+        }
+        updateTime();
+        setInterval(updateTime, 1000);
+
+        // Load weather data
+        fetch('https://api.open-meteo.com/v1/forecast?latitude=37.7749&longitude=-122.4194&hourly=temperature_2m,precipitation_probability&daily=sunrise,sunset&temperature_unit=fahrenheit&timezone=America/Los_Angeles&forecast_days=3')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(meteoData => {
+                // Check if data structure is valid
+                if (!meteoData.hourly || !meteoData.hourly.temperature_2m) {
+                    throw new Error('Invalid weather data');
+                }
+                
+                // Get current temperature from first hour
+                const currentTemp = Math.round(meteoData.hourly.temperature_2m[0]);
+                let html = `<div class="weather-now">Now: ${currentTemp}°F</div>`;
+                
+                // Add sunrise/sunset with bars
+                if (meteoData.daily && meteoData.daily.sunrise && meteoData.daily.sunset) {
+                    const sunrise = new Date(meteoData.daily.sunrise[0]).toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit', hour12: true}).toLowerCase();
+                    const sunset = new Date(meteoData.daily.sunset[0]).toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit', hour12: true}).toLowerCase();
+                    
+                    html += `<div>━━━━━━━━━━━━━━━━━━━━━━━</div>`;
+                    html += `<div class="sun-times">Sunrise: ${sunrise} | Sunset: ${sunset}</div>`;
+                    html += `<div>━━━━━━━━━━━━━━━━━━━━━━━</div>`;
+                } else {
+                    html += `<div>━━━━━━━━━━━━━━━━━━━━━━━</div>`;
+                }
+                
+                // Get hourly data
+                const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+                const temps = meteoData.hourly.temperature_2m;
+                const rain = meteoData.hourly.precipitation_probability || [];
+                const times = meteoData.hourly.time;
+                
+                // Start from next 3-hour mark
+                const now = new Date();
+                const currentHour = now.getHours();
+                const nextThreeHour = Math.ceil(currentHour / 3) * 3;
+                
+                let startIdx = 0;
+                for(let i = 0; i < times.length; i++) {
+                    const timeDate = new Date(times[i]);
+                    if(timeDate.getHours() === nextThreeHour % 24 && timeDate > now) {
+                        startIdx = i;
+                        break;
+                    }
+                }
+                
+                // Show 16 three-hour periods
+                for(let i = 0; i < 16; i++) {
+                    const idx = startIdx + (i * 3);
+                    if(idx >= temps.length) break;
+                    
+                    const date = new Date(times[idx]);
+                    const day = days[date.getDay()];
+                    const hour = date.getHours();
+                    const period = hour === 0 ? '12am' : hour < 12 ? hour + 'am' : hour === 12 ? '12pm' : (hour - 12) + 'pm';
+                    
+                    const temp = Math.round(temps[idx]);
+                    const rainChance = rain[idx] || 0;
+                    
+                    // Create line with rain displayed inline
+                    if(rainChance > 15) {
+                        html += `<div class="weather-line">${day}, ${period}: ${temp}°F &nbsp;&nbsp;&nbsp;&nbsp;☔${rainChance}%</div>`;
+                    } else {
+                        html += `<div class="weather-line">${day}, ${period}: ${temp}°F</div>`;
+                    }
+                }
+                
+                document.getElementById('weather-data').innerHTML = html;
+            })
+            .catch(err => {
+                console.error('Weather error:', err);
+                document.getElementById('weather-data').innerHTML = 
+                    '<div class="weather-now">Weather unavailable</div>' +
+                    '<div>━━━━━━━━━━━━━━━━━━━━━━━</div>' +
+                    '<div>Refresh in 5 minutes</div>';
+            });
+
+        // Show current date with short day name (no year)
+        const today = new Date();
+        const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        const dayName = days[today.getDay()];
+        const dateStr = today.toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric'
+        });
+        document.getElementById('date-header').innerHTML = 
+            `<span class="date-line">${dayName}, ${dateStr}</span><br>NEXT 7 DAYS`;
+
+        // Load events
+        fetch('http://localhost:5000/events')
+            .then(r => r.json())
+            .then(events => {
+                const list = document.getElementById('list');
+                list.innerHTML = '';
+                if(events.length === 0) {
+                    list.innerHTML = '<div class="event">No events scheduled</div>';
+                } else {
+                    events.forEach(e => {
+                        list.innerHTML += `<div class="event">
+                            <div class="event-date">${e.date}</div>
+                            <div class="event-title">${e.title}</div>
+                        </div>`;
+                    });
+                }
+            })
+            .catch(err => {
+                document.getElementById('list').innerHTML = '<div class="event">API not running</div>';
+            });
+
+        // Reload page every 5 minutes
+        setTimeout(() => location.reload(), 300000);
+    </script>
+</body>
+</html>
