@@ -6,9 +6,23 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 import re
 import os
 
-from dotenv import load_dotenv
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 TOKEN = os.getenv('BOT_TOKEN')
+if not TOKEN:
+    # Try reading from .env file manually if dotenv not available
+    try:
+        with open('.env', 'r') as f:
+            for line in f:
+                if line.startswith('BOT_TOKEN='):
+                    TOKEN = line.split('=', 1)[1].strip()
+                    break
+    except FileNotFoundError:
+        pass
 async def add_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 3:
         await update.message.reply_text(
