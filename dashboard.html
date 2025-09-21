@@ -217,28 +217,36 @@
         document.getElementById('date-header').innerHTML = 
             `<span class="date-line">${dayName}, ${dateStr}</span><br>NEXT 7 DAYS`;
 
-        // Load events
-        fetch('http://localhost:5000/events')
-            .then(r => r.json())
-            .then(events => {
-                const list = document.getElementById('list');
-                list.innerHTML = '';
-                if(events.length === 0) {
-                    list.innerHTML = '<div class="event">No events scheduled</div>';
-                } else {
-                    events.forEach(e => {
-                        list.innerHTML += `<div class="event">
-                            <div class="event-date">${e.date}</div>
-                            <div class="event-title">${e.title}</div>
-                        </div>`;
-                    });
-                }
-            })
-            .catch(err => {
-                document.getElementById('list').innerHTML = '<div class="event">API not running</div>';
-            });
+        // Function to load events
+        function loadEvents() {
+            fetch('http://localhost:5000/events')
+                .then(r => r.json())
+                .then(events => {
+                    const list = document.getElementById('list');
+                    list.innerHTML = '';
+                    if(events.length === 0) {
+                        list.innerHTML = '<div class="event">No events scheduled</div>';
+                    } else {
+                        events.forEach(e => {
+                            list.innerHTML += `<div class="event">
+                                <div class="event-date">${e.date}</div>
+                                <div class="event-title">${e.title}</div>
+                            </div>`;
+                        });
+                    }
+                })
+                .catch(err => {
+                    document.getElementById('list').innerHTML = '<div class="event">API not running</div>';
+                });
+        }
 
-        // Reload page every 5 minutes
+        // Load events initially
+        loadEvents();
+
+        // Auto-refresh events every 3 seconds for real-time updates
+        setInterval(loadEvents, 3000);
+
+        // Reload entire page every 5 minutes (for weather updates)
         setTimeout(() => location.reload(), 300000);
     </script>
 </body>

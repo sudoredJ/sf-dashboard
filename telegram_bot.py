@@ -83,7 +83,7 @@ async def add_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     sql_date = event_date.strftime('%Y-%m-%d')
     
-    db = sqlite3.connect('/home/redj/dashboard/events.db')
+    db = sqlite3.connect('events.db')
     db.execute('INSERT INTO events (title, date_display, event_date, time) VALUES (?, ?, ?, ?)', 
                (title, date_display, sql_date, time_input))
     db.commit()
@@ -92,7 +92,7 @@ async def add_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f'Added: {date_display} - {title}')
 
 async def list_events(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    db = sqlite3.connect('/home/redj/dashboard/events.db')
+    db = sqlite3.connect('events.db')
     cur = db.execute('''
         SELECT date_display, title, event_date 
         FROM events 
@@ -118,7 +118,7 @@ async def delete_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     search = ' '.join(context.args)
-    db = sqlite3.connect('/home/redj/dashboard/events.db')
+    db = sqlite3.connect('events.db')
     db.execute('DELETE FROM events WHERE title LIKE ?', (f'%{search}%',))
     deleted = db.total_changes
     db.commit()
@@ -130,7 +130,7 @@ async def delete_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('No matching events found')
 
 async def clear_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    db = sqlite3.connect('/home/redj/dashboard/events.db')
+    db = sqlite3.connect('events.db')
     db.execute('DELETE FROM events')
     db.commit()
     db.close()

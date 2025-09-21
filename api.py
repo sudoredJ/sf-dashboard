@@ -14,28 +14,102 @@ def get_events():
     db.execute('DELETE FROM events WHERE event_date < date("now")')
     db.commit()
     
-    # Only get events within next 7 days
-    seven_days = datetime.now() + timedelta(days=7)
-    seven_days_str = seven_days.strftime('%Y-%m-%d')
-    
+    # Get all future events
     cur = db.execute('''
         SELECT id, title, date_display, event_date, time 
         FROM events 
         WHERE event_date >= date('now') 
-        AND event_date <= ?
-        ORDER BY event_date, time 
-        LIMIT 20
-    ''', (seven_days_str,))
+        ORDER BY event_date, time
+    ''')
     
-    events = []
+    # Create a dictionary to store events by date and time
+    scheduled_events = {}
     for row in cur:
-        events.append({
+        event_date = row[3]  # event_date
+        time_str = row[4] if row[4] else ''  # time
+        key = f"{event_date}_{time_str}"
+        if key not in scheduled_events:
+            scheduled_events[key] = []
+        scheduled_events[key].append({
             'id': row[0],
-            'title': row[1], 
-            'date': row[2]  # This is date_display field
+            'title': row[1],
+            'date_display': row[2]
         })
+    
+    # Generate time blocks starting from current time
+    now = datetime.now()
+    current_hour = now.hour
+    
+    # Round to next 3-hour block (12am, 3am, 6am, 9am, 12pm, 3pm, 6pm, 9pm)
+    time_blocks = [0, 3, 6, 9, 12, 15, 18, 21]
+    next_block_hour = None
+    for block in time_blocks:
+        if block > current_hour:
+            next_block_hour = block
+            break
+    
+    # If no block found today, start from midnight tomorrow
+    if next_block_hour is None:
+        start_time = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        start_time = now.replace(hour=next_block_hour, minute=0, second=0, microsecond=0)
+    
+    # Generate time slots (approximately 20 slots to cover ~2.5 days)
+    time_slots = []
+    current_slot = start_time
+    
+    for i in range(20):
+        date_str = current_slot.strftime('%Y-%m-%d')
+        hour = current_slot.hour
+        
+        # Format time display
+        if hour == 0:
+            time_display = "12am"
+        elif hour < 12:
+            time_display = f"{hour}am"
+        elif hour == 12:
+            time_display = "12pm"
+        else:
+            time_display = f"{hour-12}pm"
+        
+        # Format date display
+        day_name = current_slot.strftime('%a')
+        month_day = current_slot.strftime('%b %d')
+        date_display = f"{day_name} {month_day} {time_display}"
+        
+        # Check if there are events for this slot
+        slot_key = f"{date_str}_{time_display}"
+        alt_slot_key = f"{date_str}_"  # For events without specific time
+        
+        if slot_key in scheduled_events:
+            # Events scheduled for this specific time
+            for event in scheduled_events[slot_key]:
+                time_slots.append({
+                    'id': event['id'],
+                    'title': event['title'],
+                    'date': date_display
+                })
+        elif alt_slot_key in scheduled_events and hour in [9, 12, 15, 18]:  # Show all-day events at key times
+            # Events without specific time (all-day events)
+            for event in scheduled_events[alt_slot_key]:
+                time_slots.append({
+                    'id': event['id'],
+                    'title': event['title'],
+                    'date': f"{day_name} {month_day} (all day)"
+                })
+        else:
+            # No events for this time slot - show empty slot
+            time_slots.append({
+                'id': f"empty_{i}",
+                'title': "─── Free Time ───",
+                'date': date_display
+            })
+        
+        # Move to next 3-hour block
+        current_slot += timedelta(hours=3)
+    
     db.close()
-    return jsonify(events)
+    return jsonify(time_slots)
 
 @app.route('/add-event', methods=['POST'])
 def add_event():
