@@ -97,13 +97,6 @@ def get_events():
                     'title': event['title'],
                     'date': f"{day_name} {month_day} (all day)"
                 })
-        else:
-            # No events for this time slot - show empty slot
-            time_slots.append({
-                'id': f"empty_{i}",
-                'title': "─── Free Time ───",
-                'date': date_display
-            })
         
         # Move to next 3-hour block
         current_slot += timedelta(hours=3)
